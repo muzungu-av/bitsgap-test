@@ -10,8 +10,11 @@ use database::DatabaseConnection;
 use http_client::RestClient;
 use websocket_client::WebSocketClient;
 
-fn main() {
-    // Инициализация конфигурации
+use database::establish_connection;
+
+#[tokio::main]
+async fn main() {
+    // 
     let settings = Settings {
         api_key: "your_api_key".to_string(),
         api_secret: "your_api_secret".to_string(),
@@ -27,4 +30,11 @@ fn main() {
     // let ws_client = WebSocketClient::new(&settings.ws_url);
 
     println!("Starting application...");
+
+    // Устанавливаем соединение с базой данных
+    let db_pool = establish_connection("db.sqlite").await;
+
+    // Здесь вы можете передать пул в другие части приложения
+    println!("Подключение к SQLite установлено!");
 }
+
