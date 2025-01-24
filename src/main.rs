@@ -6,22 +6,30 @@ mod parser;
 mod websocket_client;
 
 use config::settings::Settings;
-use database::DatabaseConnection;
-use http_client::RestClient;
-use websocket_client::WebSocketClient;
+use tracing::{error, info, warn};
+use tracing_subscriber::FmtSubscriber;
 
 use database::establish_connection;
 
 #[tokio::main]
 async fn main() {
-    // 
-    let settings = Settings {
-        api_key: "your_api_key".to_string(),
-        api_secret: "your_api_secret".to_string(),
-        rest_url: "https://poloniex.com/rest".to_string(),
-        ws_url: "wss://poloniex.com/ws".to_string(),
-        db_url: "postgres://user:password@localhost/database".to_string(),
-    };
+    // Настройка логирования
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(tracing::Level::INFO) // Уровень логирования
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
+
+    // Пример логов
+    info!("Info logging level is enabled!");
+    warn!("Warn logging level is enabled!");
+    error!("Error logging level is enabled!");
+
+    let settings = Settings::from_env();
+
+    info!("API Key: {}", settings.api_key);
+    info!("REST URL: {}", settings.rest_url);
+    info!("Database URL: {}", settings.db_url);
 
     // let db_connection = DatabaseConnection::new(&settings.db_url);
 
@@ -29,12 +37,11 @@ async fn main() {
 
     // let ws_client = WebSocketClient::new(&settings.ws_url);
 
-    println!("Starting application...");
+    info!("Starting application...");
 
     // Устанавливаем соединение с базой данных
-    let db_pool = establish_connection("db.sqlite").await;
+    let db_pool = establish_connection(&settings.db_url).await;
 
     // Здесь вы можете передать пул в другие части приложения
-    println!("Подключение к SQLite установлено!");
+    info!("Подключение к SQLite установлено!");
 }
-

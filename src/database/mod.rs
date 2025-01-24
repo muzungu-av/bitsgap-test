@@ -1,39 +1,44 @@
 pub mod connection;
+mod db_init;
 pub mod models;
 
-pub use connection::DatabaseConnection;
-pub use models::{KlineModel, RecentTradeModel};
-
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::Pool;
+use db_init::initialize_database;
 use sqlx::sqlite::SqlitePool;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::{Pool, Sqlite};
 
-/// Sets up a connection to a SQLite database
-pub async fn establish_connection(filename: &str) -> Pool<sqlx::Sqlite> {
+/*
+    Sets up a connection to a SQLite database
+*/
+pub async fn establish_connection(filename: &str) -> Pool<Sqlite> {
     let options = SqliteConnectOptions::new()
-        .filename(filename) // Database path
+        .filename(filename)
         .create_if_missing(true); // Creates a file if it does not exist
 
-    SqlitePoolOptions::new()
-        .max_connections(5) // Maximum of 5 connections in a pool
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5) // Pool - maximum of 5 connections
         .connect_with(options) // Establishing a connection
         .await
-        .expect("Database connection error")
+        .expect("Database connection error");
+
+    // Database initialization
+    initialize_database(&pool).await;
+
+    pool
 }
 
-
 /// Creates a test database in memory
+#[allow(dead_code)]
 pub async fn get_test_database_pool() -> SqlitePool {
     SqlitePool::connect("sqlite::memory:")
         .await
         .expect("Error connecting to the test database")
 }
 
-
 /*
  *  Test module
  */
-#[cfg(test)] 
+#[cfg(test)]
 mod tests {
     use super::*; // import get_test_database_pool
     use sqlx::{query, Row};
@@ -43,50 +48,22 @@ mod tests {
         // 1. Create a connection pool to the test base
         let pool = get_test_database_pool().await;
 
-        // 2. Create tables recent_trades and klines
-        query(
-            r#"
-            CREATE TABLE recent_trades (
-                tid TEXT PRIMARY KEY,
-                pair TEXT NOT NULL,
-                price TEXT NOT NULL,
-                amount TEXT NOT NULL,
-                side TEXT NOT NULL,
-                timestamp INTEGER NOT NULL
-            );
-            CREATE TABLE klines (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                pair TEXT NOT NULL,
-                time_frame TEXT NOT NULL,
-                o REAL NOT NULL,
-                h REAL NOT NULL,
-                l REAL NOT NULL,
-                c REAL NOT NULL,
-                utc_begin INTEGER NOT NULL,
-                buy_base REAL NOT NULL,
-                sell_base REAL NOT NULL,
-                buy_quote REAL NOT NULL,
-                sell_quote REAL NOT NULL
-            );
-            "#
-        )
-        .execute(&pool)
-        .await
-        .expect("Не удалось создать таблицы");
+        // Database initialization
+        initialize_database(&pool).await;
 
         // 3. Insert test data into recent_trades
         query(
             r#"
             INSERT INTO recent_trades (tid, pair, price, amount, side, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
-            "#
+            "#,
         )
         .bind("1")
         .bind("BTC_USDT")
         .bind("30000.50")
         .bind("0.01")
         .bind("buy")
-        .bind(1737656100)
+        .bind(1737709931)
         .execute(&pool)
         .await
         .expect("Failed to insert data into recent_trades");
@@ -97,7 +74,7 @@ mod tests {
             SELECT tid, pair, price, amount, side, timestamp
             FROM recent_trades
             WHERE tid = ?
-            "#
+            "#,
         )
         .bind("1")
         .fetch_one(&pool)
@@ -116,7 +93,7 @@ mod tests {
         assert_eq!(price, "30000.50");
         assert_eq!(amount, "0.01");
         assert_eq!(side, "buy");
-        assert_eq!(timestamp, 1737656100);
+        assert_eq!(timestamp, 1737709931);
 
         // 5. Inserting test data into klines
         query(
@@ -125,7 +102,7 @@ mod tests {
                 pair, time_frame, o, h, l, c, utc_begin, buy_base, sell_base, buy_quote, sell_quote
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#
+            "#,
         )
         .bind("BTC_USDT")
         .bind("1m")
@@ -133,7 +110,7 @@ mod tests {
         .bind(30100.0) // high
         .bind(29900.0) // low
         .bind(30050.0) // close
-        .bind(1690233000) // unix time open k
+        .bind(1737709931) // unix time open k
         .bind(0.5) // buy_base
         .bind(0.3) // sell_base
         .bind(15000.0) // buy_quote
@@ -174,7 +151,7 @@ mod tests {
         assert_eq!(h, 30100.0);
         assert_eq!(l, 29900.0);
         assert_eq!(c, 30050.0);
-        assert_eq!(utc_begin, 1690233000);
+        assert_eq!(utc_begin, 1737709931);
         assert_eq!(buy_base, 0.5);
         assert_eq!(sell_base, 0.3);
         assert_eq!(buy_quote, 15000.0);
