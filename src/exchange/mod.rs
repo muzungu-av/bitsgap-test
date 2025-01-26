@@ -30,11 +30,19 @@ impl Exchange {
     }
 
     /// Получение данных из API
-    pub async fn fetch_data(&self, endpoint: &str) -> Result<String, String> {
-        let url = format!("{}/{}", self.rest_url, endpoint);
-        println!("Fetching data from {}", url);
-        match self.rest_client.get(&url).await {
-            Ok(data) => Ok(data),
+    pub async fn run(
+        &self,
+        urls: &Vec<(String, String, String)>,
+    ) -> Result<(String, String, String), String> {
+        //todo берет пока первый URLS
+        match self.rest_client.get(&urls[0].2).await {
+            Ok(data) => {
+                let r = (urls[0].0.clone(), urls[0].1.clone(), data);
+                println!("Response: {}", r.0);
+                println!("Response: {}", r.1);
+                println!("Response: {}", r.2);
+                Ok(r)
+            }
             Err(e) => Err(format!("Failed to fetch data: {}", e)),
         }
     }
@@ -51,7 +59,7 @@ impl ExchangeFactory {
         }
 
         let rest_url = match exchange_name.to_lowercase().as_str() {
-            "poloniex" => &settings.poloniex_rest_url,
+            "poloniex" => &settings.poloniex_rest_url_base,
             "binance" => &settings.binance_rest_url,
             _ => return Err(ExchangeFactoryError::UnknownExchange()),
         };

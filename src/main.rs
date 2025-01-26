@@ -16,11 +16,12 @@ use exchange::{Exchange, ExchangeBuilderError, ExchangeFactory};
 async fn main() {
     // Configuring logging
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO) // Logging level
+        .with_max_level(tracing::Level::DEBUG) // Logging level INFO
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
 
+    debug!("Debug logging level is enabled!");
     info!("Info logging level is enabled!");
     warn!("Warn logging level is enabled!");
     error!("Error logging level is enabled!");
@@ -33,7 +34,7 @@ async fn main() {
     info!("Starting application...");
 
     // Создаем и настраиваем биржу
-    match setup_exchange(&settings).await {
+    let exchange = match setup_exchange(&settings).await {
         Ok(exchange) => {
             if let Err(err) = exchange.connect().await {
                 error!("Failed to connect to exchange: {}", err);
@@ -43,15 +44,60 @@ async fn main() {
             //     Ok(data) => println!("Fetched data: {}", data),
             //     Err(err) => error!("Failed to fetch data: {}", err),
             // }
-            println!("Fetched data:");
+            Some(exchange)
         }
         Err(err) => {
             error!("Failed to setup exchange: {}", err);
+            None
+        }
+    };
+
+    if let Some(exchange) = exchange {
+        info!("The Exchange process is running");
+
+        let urls = generate_urls(
+            &settings.poloniex_rest_url_base,
+            &settings.poloniex_rest_url_endpoint,
+            &settings.symbols,
+            &settings.timeframes,
+        );
+
+        {
+            for url in &urls {
+                debug!("{}", url.2);
+            }
+        }
+
+        if let Err(err) = exchange.run(&urls).await {
+            error!("Failed to run exchange: {}", err);
+        }
+    } else {
+        // Обработка случая, когда exchange не был создан
+        error!("Exchange not available");
+    }
+    // You can pass the db_pool to other parts of the application
+    info!("Finish");
+}
+
+fn generate_urls(
+    base_url: &str,
+    endpoint_url: &str,
+    symbols: &[String],
+    timeframes: &[String],
+) -> Vec<(String, String, String)> {
+    let mut urls = Vec::new();
+
+    for symbol in symbols {
+        for timeframe in timeframes {
+            let url = endpoint_url
+                .replace("{base_url}", base_url)
+                .replace("{symbol}", symbol)
+                .replace("{timeframe}", timeframe);
+            urls.push((symbol.to_string(), timeframe.to_string(), url));
         }
     }
 
-    // You can pass the db_pool to other parts of the application
-    info!("Finish");
+    urls
 }
 
 /// Creates and configures an Exchange instance
