@@ -6,6 +6,7 @@ use db_init::initialize_database;
 use sqlx::sqlite::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Pool, Sqlite};
+use tracing::debug;
 
 /*
     Sets up a connection to a SQLite database
@@ -23,13 +24,13 @@ pub async fn establish_connection(filename: &str) -> Pool<Sqlite> {
 
     // Database initialization
     initialize_database(&pool).await;
-
+    debug!("Database connection established!");
     pool
 }
 
 /// Creates a test database in memory
 #[allow(dead_code)]
-pub async fn get_test_database_pool() -> SqlitePool {
+pub async fn get_test_database_sqlitePool() -> SqlitePool {
     SqlitePool::connect("sqlite::memory:")
         .await
         .expect("Error connecting to the test database")
@@ -40,13 +41,13 @@ pub async fn get_test_database_pool() -> SqlitePool {
  */
 #[cfg(test)]
 mod tests {
-    use super::*; // import get_test_database_pool
+    use super::*; // import get_test_database_sqlitePool
     use sqlx::{query, Row};
 
     #[tokio::test] // Asynchronous test
     async fn test_database_with_recent_trades_and_klines() {
         // 1. Create a connection pool to the test base
-        let pool = get_test_database_pool().await;
+        let pool = get_test_database_sqlitePool().await;
 
         // Database initialization
         initialize_database(&pool).await;

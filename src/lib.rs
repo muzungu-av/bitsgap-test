@@ -8,6 +8,5 @@ pub mod websocket_client;
 // export core modules for use as a library
 pub use aggregator::CandleAggregator;
 pub use config::settings::Settings;
-pub use http_client::RestClient;
 pub use parser::{Kline, RecentTrade, VBS};
 pub use websocket_client::WebSocketClient;

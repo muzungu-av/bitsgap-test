@@ -1,5 +1,3 @@
 pub mod error;
-pub mod rest_client;
-
+pub mod http_client;
 pub use error::HttpClientError;
-pub use rest_client::RestClient;
