@@ -2,7 +2,7 @@ pub mod kline;
 pub mod recent_trade;
 use std::collections::HashMap;
 
-use kline::Kline;
+use kline::{Kline, VBS};
 use serde_json::Value;
 
 pub struct KlineParser;
@@ -12,21 +12,21 @@ impl KlineParser {
         KlineParser
     }
 
-    fn group_klines_by_pair_and_time_frame(
-        klines: Vec<Kline>,
-    ) -> HashMap<(String, String), Vec<Kline>> {
-        let mut grouped_klines: HashMap<(String, String), Vec<Kline>> = HashMap::new();
+    // fn group_klines_by_pair_and_time_frame(
+    //     klines: Vec<Kline>,
+    // ) -> HashMap<(String, String), Vec<Kline>> {
+    //     let mut grouped_klines: HashMap<(String, String), Vec<Kline>> = HashMap::new();
 
-        for kline in klines {
-            let key = (kline.pair.clone(), kline.time_frame.clone());
-            grouped_klines
-                .entry(key)
-                .or_insert_with(Vec::new)
-                .push(kline);
-        }
+    //     for kline in klines {
+    //         let key = (kline.pair.clone(), kline.time_frame.clone());
+    //         grouped_klines
+    //             .entry(key)
+    //             .or_insert_with(Vec::new)
+    //             .push(kline);
+    //     }
 
-        grouped_klines
-    }
+    //     grouped_klines
+    // }
 
     pub fn parse(
         &self,
@@ -41,6 +41,9 @@ impl KlineParser {
                         if item.len() != 14 {
                             return None; // Пропускаем невалидные элементы
                         }
+
+                        // Создаем VBS из данных
+                        let vbs = VBS::from_data(&item)?;
 
                         Some(Kline {
                             pair: pair.to_string(),
@@ -65,6 +68,7 @@ impl KlineParser {
                                 .and_then(|s| s.parse::<f64>().ok())
                                 .unwrap_or_default(),
                             utc_begin: item[12].as_i64().unwrap_or(0),
+                            volume_bs: vbs,
                         })
                     })
                     .fold(
@@ -82,3 +86,5 @@ impl KlineParser {
         }
     }
 }
+
+//todo на последней свече все меняется.

@@ -16,7 +16,7 @@ impl CandleAggregator {
 
     pub fn process(&self, grouped_kline: HashMap<(String, String), Vec<Kline>>) {
         for (key, klines) in grouped_kline {
-            println!("Key: {:?}, Count: {}", key, klines.len());
+            println!("K:{:?},V:{:?}", key, klines);
         }
     }
 }

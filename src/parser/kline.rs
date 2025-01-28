@@ -1,5 +1,7 @@
 use std::fmt;
 
+use serde_json::Value;
+
 #[derive(Debug)]
 pub struct Kline {
     pub pair: String,       // Название пары
@@ -8,8 +10,9 @@ pub struct Kline {
     pub h: f64,             // Максимальная цена
     pub l: f64,             // Минимальная цена
     pub c: f64,             // Цена закрытия
-    pub utc_begin: i64,     // Время начала формирования свечки
-                            // pub volume_bs: VBS,
+    pub utc_begin: i64,
+    pub(crate) volume_bs: VBS, // Время начала формирования свечки
+                               // pub volume_bs: VBS,
 }
 
 impl fmt::Display for Kline {
@@ -25,35 +28,28 @@ impl fmt::Display for Kline {
             self.l,
             self.c,
             self.utc_begin,
-            // self.volume_bs.amount,
-            // self.volume_bs.quantity,
-            // self.volume_bs.buy_taker_amount,
-            // self.volume_bs.buy_taker_quantity
         )
     }
 }
 
-// #[derive(Debug)]
-// pub struct CandleData {
-//     open: f64,
-//     high: f64,
-//     low: f64,
-//     close: f64,
-//     volume: f64,
-//     quote_asset_volume: f64,
-//     taker_buy_base_asset_volume: f64,
-//     taker_buy_quote_asset_volume: f64,
-//     number_of_trades: u64,
-//     close_time: u64,
-//     last_price: f64,
-//     interval: String,
-//     start_time: u64,
-//     end_time: u64,
-// }
-
+#[derive(Debug)]
 pub struct VBS {
-    pub buy_base: f64,   // Объём покупок в базовой валюте
-    pub sell_base: f64,  // Объём продаж в базовой валюте
-    pub buy_quote: f64,  // Объём покупок в котируемой валюте
-    pub sell_quote: f64, // Объём продаж в котируемой валюте
+    pub buy_base: f64,   // Объём покупок в базовой валюте - buyTakerQuantity
+    pub sell_base: f64,  // Объём продаж в базовой валюте  - quantity
+    pub buy_quote: f64,  // Объём покупок в котируемой валюте - buyTakerAmount
+    pub sell_quote: f64, // Объём продаж в котируемой валюте  - amount
+}
+impl VBS {
+    pub fn from_data(data: &[Value]) -> Option<Self> {
+        if data.len() < 14 {
+            return None; // Недостаточно данных
+        }
+
+        Some(VBS {
+            buy_base: data[7].as_str()?.parse().ok()?, // buyTakerQuantity
+            sell_base: data[5].as_str()?.parse().ok()?, // quantity
+            buy_quote: data[6].as_str()?.parse().ok()?, // buyTakerAmount
+            sell_quote: data[4].as_str()?.parse().ok()?, // amount
+        })
+    }
 }
