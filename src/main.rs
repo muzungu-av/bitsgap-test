@@ -5,18 +5,21 @@ mod exchange;
 mod http_client;
 mod parser;
 mod websocket_client;
+use aggregator::CandleAggregator;
 use config::settings::Settings;
+use parser::KlineParser;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::FmtSubscriber;
 
 use database::establish_connection;
 use exchange::{Exchange, ExchangeBuilderError, ExchangeFactory};
+use uuid::Uuid;
 
 #[tokio::main]
 async fn main() {
     // Configuring logging
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::DEBUG) // Logging level INFO
+        .with_max_level(tracing::Level::INFO) // Logging level INFO
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
@@ -96,7 +99,6 @@ fn generate_urls(
             urls.push((symbol.to_string(), timeframe.to_string(), url));
         }
     }
-
     urls
 }
 
@@ -112,6 +114,14 @@ async fn setup_exchange(settings: &Settings) -> Result<Exchange, String> {
     builder.set_target_db(db_pool);
     debug!("Builder seting db pool is complete");
 
+    //Экземпляр парсера
+    let parser = KlineParser::new();
+    builder.set_parser(parser);
+
+    //Экземпляр агреггатора
+    let aggregator = CandleAggregator::get_instance();
+    builder.set_aggregator(aggregator);
+
     match builder.build() {
         Ok(exchange) => {
             debug!("The Exchange is complete ");
@@ -120,5 +130,9 @@ async fn setup_exchange(settings: &Settings) -> Result<Exchange, String> {
         Err(ExchangeBuilderError::MissingName) => Err("Name is missing".to_string()),
         Err(ExchangeBuilderError::MissingRestUrl) => Err("REST URL is missing".to_string()),
         Err(ExchangeBuilderError::MissingRestClient) => Err("RestClient is missing".to_string()),
+        Err(ExchangeBuilderError::MissingParser) => Err("Parser is missing".to_string()),
+        Err(ExchangeBuilderError::MissingCandleAggregator) => {
+            Err("CandleAggregator is missing".to_string())
+        }
     }
 }
