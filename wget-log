@@ -1,0 +1,7 @@
+--2025-01-28 21:21:14--  https://rr3---sn-5hne6nzk.googlevideo.com/videoplayback?expire=1738110012
+Загружен сертификат CA «/etc/ssl/certs/ca-certificates.crt»
+Распознаётся rr3---sn-5hne6nzk.googlevideo.com (rr3---sn-5hne6nzk.googlevideo.com)… 172.217.132.136, 2a00:1450:400e:14::8
+Подключение к rr3---sn-5hne6nzk.googlevideo.com (rr3---sn-5hne6nzk.googlevideo.com)|172.217.132.136|:443... соединение установлено.
+HTTP-запрос отправлен. Ожидание ответа… 403 Forbidden
+2025-01-28 21:21:14 ОШИБКА 403: Forbidden.
+

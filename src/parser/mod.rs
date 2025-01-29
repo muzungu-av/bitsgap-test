@@ -12,22 +12,6 @@ impl KlineParser {
         KlineParser
     }
 
-    // fn group_klines_by_pair_and_time_frame(
-    //     klines: Vec<Kline>,
-    // ) -> HashMap<(String, String), Vec<Kline>> {
-    //     let mut grouped_klines: HashMap<(String, String), Vec<Kline>> = HashMap::new();
-
-    //     for kline in klines {
-    //         let key = (kline.pair.clone(), kline.time_frame.clone());
-    //         grouped_klines
-    //             .entry(key)
-    //             .or_insert_with(Vec::new)
-    //             .push(kline);
-    //     }
-
-    //     grouped_klines
-    // }
-
     pub fn parse(
         &self,
         response: &str,
@@ -39,10 +23,10 @@ impl KlineParser {
                     .into_iter()
                     .flat_map(|item| {
                         if item.len() != 14 {
-                            return None; // Пропускаем невалидные элементы
+                            return None; // Skip invalid elements
                         }
 
-                        // Создаем VBS из данных
+                        // Creating VBS from data
                         let vbs = VBS::from_data(&item)?;
 
                         Some(Kline {

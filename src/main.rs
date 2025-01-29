@@ -13,13 +13,12 @@ use tracing_subscriber::FmtSubscriber;
 
 use database::establish_connection;
 use exchange::{Exchange, ExchangeBuilderError, ExchangeFactory};
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main() {
     // Configuring logging
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO) // Logging level INFO
+        .with_max_level(tracing::Level::INFO) // Logging level INFO or DEBUG
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
@@ -36,17 +35,14 @@ async fn main() {
 
     info!("Starting application...");
 
-    // Создаем и настраиваем биржу
+    // Create and customize the exchange
     let exchange = match setup_exchange(&settings).await {
         Ok(exchange) => {
+            //todo не нужно
             if let Err(err) = exchange.connect().await {
                 error!("Failed to connect to exchange: {}", err);
                 return;
             }
-            // match fetch_exchange_data(&exchange, "ticker").await {
-            //     Ok(data) => println!("Fetched data: {}", data),
-            //     Err(err) => error!("Failed to fetch data: {}", err),
-            // }
             Some(exchange)
         }
         Err(err) => {
@@ -75,7 +71,7 @@ async fn main() {
             error!("Failed to run exchange: {}", err);
         }
     } else {
-        // Обработка случая, когда exchange не был создан
+        // Handling a case where an exchange has not been created
         error!("Exchange not available");
     }
     // You can pass the db_pool to other parts of the application
@@ -114,11 +110,11 @@ async fn setup_exchange(settings: &Settings) -> Result<Exchange, String> {
     builder.set_target_db(db_pool);
     debug!("Builder seting db pool is complete");
 
-    //Экземпляр парсера
+    //Parser instance
     let parser = KlineParser::new();
     builder.set_parser(parser);
 
-    //Экземпляр агреггатора
+    //Aggregator instance
     let aggregator = CandleAggregator::get_instance();
     builder.set_aggregator(aggregator);
 

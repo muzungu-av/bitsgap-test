@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde_json::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Kline {
     pub pair: String,       // Название пары
     pub time_frame: String, // Таймфрейм (1m, 15m и т.д.)
@@ -11,8 +11,7 @@ pub struct Kline {
     pub l: f64,             // Минимальная цена
     pub c: f64,             // Цена закрытия
     pub utc_begin: i64,
-    pub(crate) volume_bs: VBS, // Время начала формирования свечки
-                               // pub volume_bs: VBS,
+    pub(crate) volume_bs: VBS,
 }
 
 impl fmt::Display for Kline {
@@ -20,7 +19,6 @@ impl fmt::Display for Kline {
         write!(
             f,
             "Kline {{ pair: {}, time_frame: {}, open: {:.6}, high: {:.6}, low: {:.6}, close: {:.6}, utc_begin: {} }}",
-            // "Kline {{ pair: {}, time_frame: {}, open: {:.6}, high: {:.6}, low: {:.6}, close: {:.6}, utc_begin: {}, volume: {{ amount: {:.6}, quantity: {:.6}, buy_taker_amount: {:.6}, buy_taker_quantity: {:.6} }} }}",
             self.pair,
             self.time_frame,
             self.o,
@@ -32,7 +30,7 @@ impl fmt::Display for Kline {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VBS {
     pub buy_base: f64,   // Объём покупок в базовой валюте - buyTakerQuantity
     pub sell_base: f64,  // Объём продаж в базовой валюте  - quantity

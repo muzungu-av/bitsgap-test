@@ -38,51 +38,51 @@ impl Exchange {
         }
     }
 
+    //todo убрать
     pub async fn connect(&self) -> Result<(), String> {
         info!("Connecting to {} API at {}", self.name, self.rest_url);
         Ok(())
     }
 
-    /// Получение данных из API
-    pub async fn run(&self, urls: &Vec<(String, String, String)>) -> Result<(), String> {
-        //-> Result<(String, String, String), String>
-        //todo берет пока первый URLS
+    /// Getting data from API
+    pub async fn run(&self, urls: &[(String, String, String)]) -> Result<(), String> {
+        // 1. Collect (symbol, timeframe) before the loop
+        let keys: Vec<(String, String)> = urls
+            .iter()
+            .map(|(key1, key2, _)| (key1.clone(), key2.clone()))
+            .collect();
 
+        // 2. Call build_handlers() once before the loop to build a chain of handlers for filtering
+        {
+            let mut aggregator = self.aggregator.lock().unwrap();
+            aggregator.build_handlers(&keys);
+        }
+
+        // 3. In the loop we only receive and process data
         for (key1, key2, url) in urls {
             match self.rest_client.get(url).await {
                 Ok(data) => {
-                    // Парсим данные
-                    match self.parser.parse(&data, &key1) {
+                    // Parsing the data
+                    match self.parser.parse(&data, key1) {
                         Ok(parsed_data) => {
-                            // Передаем данные в Агрегатор
-                            let mut aggregator = self.aggregator.lock().unwrap();
-
-                            aggregator.process(parsed_data);
+                            let aggregator = self.aggregator.lock().unwrap();
+                            /* Here you can theoretically send the result of several requests from different Url */
+                            aggregator.http_response_process(parsed_data);
                         }
                         Err(parse_error) => {
                             eprintln!("Failed to parse data from {}: {}", url, parse_error);
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!("Failed to fetch data from {}: {}", url, e);
+                Err(fetch_error) => {
+                    eprintln!("Failed to fetch data from {}: {}", url, fetch_error);
                 }
             }
         }
+
         Ok(())
-        // match self.rest_client.get(&urls[0].2).await {
-        //     Ok(data) => {
-        //         let r = (urls[0].0.clone(), urls[0].1.clone(), data);
-        //         println!("Response: {}", r.0);
-        //         println!("Response: {}", r.1);
-        //         println!("Response: {}", r.2);
-        //         Ok(r)
-        //     }
-        //     Err(e) => Err(format!("Failed to fetch data: {}", e)),
-        // }
     }
 }
-
 pub struct ExchangeFactory;
 
 impl ExchangeFactory {
