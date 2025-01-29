@@ -115,7 +115,10 @@ async fn setup_exchange(settings: &Settings) -> Result<Exchange, String> {
     builder.set_parser(parser);
 
     //Aggregator instance
-    let aggregator = CandleAggregator::get_instance();
+    // let aggregator = CandleAggregator::get_instance();
+    // builder.set_aggregator(aggregator);
+
+    let aggregator = CandleAggregator::get_instance().clone();
     builder.set_aggregator(aggregator);
 
     match builder.build() {
@@ -130,5 +133,6 @@ async fn setup_exchange(settings: &Settings) -> Result<Exchange, String> {
         Err(ExchangeBuilderError::MissingCandleAggregator) => {
             Err("CandleAggregator is missing".to_string())
         }
+        Err(ExchangeBuilderError::MissingDBPool) => Err("DBPool is missing".to_string()),
     }
 }

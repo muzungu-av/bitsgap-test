@@ -1,7 +1,8 @@
 mod error;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use sqlx::{Pool, Sqlite};
+use tracing::error;
 use tracing::info;
 
 use crate::{
@@ -18,7 +19,8 @@ pub struct Exchange {
     pub rest_url: String,
     pub rest_client: Box<dyn RestClient>,
     pub parser: KlineParser,
-    pub aggregator: &'static Mutex<CandleAggregator>,
+    pub aggregator: Option<Arc<CandleAggregator>>,
+    db_pool: Pool<Sqlite>,
 }
 
 impl Exchange {
@@ -27,7 +29,8 @@ impl Exchange {
         rest_url: &str,
         rest_client: Box<dyn RestClient>,
         parser: KlineParser,
-        aggregator: &'static Mutex<CandleAggregator>,
+        aggregator: Option<Arc<CandleAggregator>>,
+        db_pool: Pool<Sqlite>,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -35,6 +38,7 @@ impl Exchange {
             rest_client,
             parser,
             aggregator,
+            db_pool,
         }
     }
 
@@ -54,8 +58,11 @@ impl Exchange {
 
         // 2. Call build_handlers() once before the loop to build a chain of handlers for filtering
         {
-            let mut aggregator = self.aggregator.lock().unwrap();
-            aggregator.build_handlers(&keys);
+            if let Some(aggregator) = self.aggregator.as_ref() {
+                aggregator.build_handlers(&keys, &self.db_pool);
+            } else {
+                error!("CandleAggregator is not set in ExchangeBuilder");
+            }
         }
 
         // 3. In the loop we only receive and process data
@@ -65,9 +72,13 @@ impl Exchange {
                     // Parsing the data
                     match self.parser.parse(&data, key1) {
                         Ok(parsed_data) => {
-                            let aggregator = self.aggregator.lock().unwrap();
-                            /* Here you can theoretically send the result of several requests from different Url */
-                            aggregator.http_response_process(parsed_data);
+                            if let Some(aggregator) = self.aggregator.as_ref() {
+                                // aggregator.build_handlers(&keys, &self.db_pool);
+                                /* Here you can theoretically send the result of several requests from different Url */
+                                aggregator.http_response_process(parsed_data);
+                            } else {
+                                error!("CandleAggregator is not set in ExchangeBuilder");
+                            }
                         }
                         Err(parse_error) => {
                             eprintln!("Failed to parse data from {}: {}", url, parse_error);
@@ -121,6 +132,7 @@ pub enum ExchangeBuilderError {
     MissingRestClient,
     MissingParser,
     MissingCandleAggregator,
+    MissingDBPool,
 }
 
 pub struct ExchangeBuilder {
@@ -129,7 +141,7 @@ pub struct ExchangeBuilder {
     rest_client: Option<Box<dyn RestClient>>,
     db_pool: Option<Pool<Sqlite>>,
     parser: Option<KlineParser>,
-    aggregator: Option<&'static Mutex<CandleAggregator>>, // Ссылка на синглтон
+    aggregator: Option<Arc<CandleAggregator>>,
 }
 
 impl ExchangeBuilder {
@@ -175,7 +187,7 @@ impl ExchangeBuilder {
         self
     }
 
-    pub fn set_aggregator(&mut self, aggregator: &'static Mutex<CandleAggregator>) -> &Self {
+    pub fn set_aggregator(&mut self, aggregator: Arc<CandleAggregator>) -> &Self {
         self.aggregator = Some(aggregator);
         self
     }
@@ -188,15 +200,15 @@ impl ExchangeBuilder {
             .rest_client
             .ok_or(ExchangeBuilderError::MissingRestClient)?;
         let parser = self.parser.ok_or(ExchangeBuilderError::MissingParser)?;
-        let aggregator = self
-            .aggregator
-            .ok_or(ExchangeBuilderError::MissingCandleAggregator)?;
+        let aggregator = self.aggregator.clone();
+        let pool = self.db_pool.ok_or(ExchangeBuilderError::MissingDBPool)?;
         Ok(Exchange::new(
             &name,
             &rest_url,
             rest_client,
             parser,
             aggregator,
+            pool,
         ))
     }
 }

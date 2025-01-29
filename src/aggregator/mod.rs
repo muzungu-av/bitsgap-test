@@ -1,4 +1,5 @@
 use once_cell::sync::Lazy;
+use sqlx::{Pool, Sqlite};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -9,6 +10,7 @@ use crate::parser::kline::Kline;
 
 pub struct CandleAggregator {
     chain: Mutex<FilterChain>,
+    db_pool: Arc<Mutex<Option<Pool<Sqlite>>>>,
 }
 
 /*
@@ -21,24 +23,34 @@ pub struct CandleAggregator {
     sorting each data series by a separate handler, However, this has not been tested....
 */
 impl CandleAggregator {
-    pub fn get_instance() -> &'static Mutex<Self> {
-        static INSTANCE: Lazy<Mutex<CandleAggregator>> = Lazy::new(|| {
-            Mutex::new(CandleAggregator {
+    pub fn get_instance() -> &'static Arc<Self> {
+        // <-- теперь возвращаем Arc
+        static INSTANCE: Lazy<Arc<CandleAggregator>> = Lazy::new(|| {
+            Arc::new(CandleAggregator {
                 chain: Mutex::new(FilterChain::new()),
+                db_pool: Arc::new(Mutex::new(None)), // <-- Arc, чтобы делиться между потоками
             })
         });
         &INSTANCE
     }
 
     // builds handlers by keys
-    pub fn build_handlers(&self, keys: &[(String, String)]) {
+    pub fn build_handlers(&self, keys: &[(String, String)], db_pool: &Pool<Sqlite>) {
         let mut chain = self.chain.lock().unwrap();
+        let db_pool = Arc::clone(&self.db_pool); //To avoid referring to `self`` within iterations
 
         for (index, key) in keys.iter().enumerate() {
             let key = key.clone();
             let handler_name = format!("Handler_{}", index); // Unique name of the handler
 
+            let db_pool = Arc::clone(&db_pool); //So that it is passed to the closure, but does not move the entire variable.
+
             let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
+                let db_guard = db_pool.lock().unwrap();
+                if db_guard.is_none() {
+                    debug!("DB pool is not initialized yet!");
+                }
+
                 if let Some(klines) = data.remove(&key) {
                     if tracing::level_enabled!(Level::DEBUG) {
                         debug!(
@@ -64,7 +76,7 @@ impl CandleAggregator {
 
             chain.add_handler(handler);
         }
-        println!("Цепочка из {} обработчиков", chain.handlers.len());
+        println!("Chain of {} handlers", chain.handlers.len());
     }
 
     // starts a chain of handlers
