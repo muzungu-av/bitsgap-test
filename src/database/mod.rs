@@ -5,8 +5,10 @@ pub mod models;
 use db_init::initialize_database;
 use sqlx::sqlite::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{Pool, Sqlite};
+use sqlx::{query, Pool, Sqlite};
 use tracing::debug;
+
+use crate::parser::kline::Kline;
 
 /*
     Sets up a connection to a SQLite database
@@ -34,6 +36,31 @@ pub async fn get_test_database_sqlitePool() -> SqlitePool {
     SqlitePool::connect("sqlite::memory:")
         .await
         .expect("Error connecting to the test database")
+}
+
+pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(), sqlx::Error> {
+    let mut tx = db_pool.begin().await?;
+
+    for kline in klines {
+        sqlx::query(
+            r#"
+            INSERT INTO klines (pair, time_frame, o, h, l, c, utc_begin)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&kline.pair)
+        .bind(&kline.time_frame)
+        .bind(kline.o)
+        .bind(kline.h)
+        .bind(kline.l)
+        .bind(kline.c)
+        .bind(kline.utc_begin)
+        .execute(&mut *tx) // используем `&mut *tx` для транзакции
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
 }
 
 /*

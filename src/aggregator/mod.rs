@@ -1,16 +1,13 @@
+use crate::{database::save_klines, parser::kline::Kline};
 use once_cell::sync::Lazy;
 use sqlx::{Pool, Sqlite};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-use tracing::{debug, info, Level};
-
-use crate::parser::kline::Kline;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
+use tracing::{debug, error, info, Level};
 
 pub struct CandleAggregator {
-    chain: Mutex<FilterChain>,
-    db_pool: Arc<Mutex<Option<Pool<Sqlite>>>>,
+    chain: Mutex<FilterChain>, // асинхронный Mutex
+    db_pool: Arc<Option<Pool<Sqlite>>>,
 }
 
 /*
@@ -24,71 +21,83 @@ pub struct CandleAggregator {
 */
 impl CandleAggregator {
     pub fn get_instance() -> &'static Arc<Self> {
-        // <-- теперь возвращаем Arc
         static INSTANCE: Lazy<Arc<CandleAggregator>> = Lazy::new(|| {
             Arc::new(CandleAggregator {
                 chain: Mutex::new(FilterChain::new()),
-                db_pool: Arc::new(Mutex::new(None)), // <-- Arc, чтобы делиться между потоками
+                db_pool: Arc::new(None),
             })
         });
         &INSTANCE
     }
 
-    // builds handlers by keys
-    pub fn build_handlers(&self, keys: &[(String, String)], db_pool: &Pool<Sqlite>) {
-        let mut chain = self.chain.lock().unwrap();
-        let db_pool = Arc::clone(&self.db_pool); //To avoid referring to `self`` within iterations
+    pub async fn build_handlers(
+        &self,
+        keys: &[(String, String)],
+        db_pool: &Option<Arc<Pool<Sqlite>>>,
+    ) {
+        // Используем асинхронную блокировку для цепочки
+        let mut chain = self.chain.lock().await; // Получаем асинхронный доступ
+        let db_pool = db_pool;
 
         for (index, key) in keys.iter().enumerate() {
             let key = key.clone();
-            let handler_name = format!("Handler_{}", index); // Unique name of the handler
+            let handler_name = format!("Handler_{}", index);
 
-            let db_pool = Arc::clone(&db_pool); //So that it is passed to the closure, but does not move the entire variable.
+            if let Some(db_pool) = db_pool {
+                let db_pool = Arc::clone(&db_pool);
 
-            let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
-                let db_guard = db_pool.lock().unwrap();
-                if db_guard.is_none() {
-                    debug!("DB pool is not initialized yet!");
-                }
+                // начало кода цепочки
+                let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
+                    let handler_name = handler_name.clone();
+                    let key = key.clone(); // по ключу будем фильтровать данные
+                    let db_pool = db_pool.clone();
+                    let mut data_copy = data.clone();
+                    tokio::spawn(async move {
+                        if let Some(klines) = data_copy.remove(&key) {
+                            if tracing::level_enabled!(Level::DEBUG) {
+                                debug!(
+                                    "Handler is started: {} for the key: ({}, {}), Data: {:?} ",
+                                    handler_name, key.0, key.1, klines
+                                );
+                            }
 
-                if let Some(klines) = data.remove(&key) {
-                    if tracing::level_enabled!(Level::DEBUG) {
-                        debug!(
-                            "Handler is started: {} for the key: ({}, {}), Data: {:?} ",
-                            handler_name, key.0, key.1, klines
-                        );
-                    }
-                    if tracing::level_enabled!(Level::INFO) {
-                        info!(
-                            "Handler is started: {} for the key: ({}, {}) and {} rows",
-                            handler_name,
-                            key.0,
-                            key.1,
-                            klines.len()
-                        );
-                    }
+                            if tracing::level_enabled!(Level::INFO) {
+                                info!(
+                                    "Handler is started: {} for the key: ({}, {}) and {} rows",
+                                    handler_name,
+                                    key.0,
+                                    key.1,
+                                    klines.len()
+                                );
+                            }
 
-                    true // Data retrieved and processed
-                } else {
-                    false // No data
-                }
-            });
-
-            chain.add_handler(handler);
+                            if let Err(e) = save_klines(&db_pool, &klines).await {
+                                error!("Failed to save klines: {}", e);
+                            }
+                        }
+                    });
+                    true
+                });
+                //конец кода цепочки
+                //добавляем обработчик в цепочку
+                chain.add_handler(handler);
+            }
         }
         println!("Chain of {} handlers", chain.handlers.len());
     }
 
-    // starts a chain of handlers
-    pub fn http_response_process(&self, mut grouped_kline: HashMap<(String, String), Vec<Kline>>) {
-        let chain = self.chain.lock().unwrap(); // Accessing the chain via Mutex
-        chain.execute(&mut grouped_kline);
+    pub async fn http_response_process(
+        &self,
+        mut grouped_kline: HashMap<(String, String), Vec<Kline>>,
+    ) {
+        // Используем block_in_place для выполнения синхронной блокировки в асинхронном контексте
+        tokio::task::block_in_place(|| {
+            let chain = self.chain.blocking_lock(); // Синхронный доступ
+            chain.execute(&mut grouped_kline);
+        });
     }
 }
 
-/*
-    The structure stores handlers, which are functions that can be run with arguments
-*/
 pub struct FilterChain {
     handlers: Vec<Arc<dyn Fn(&mut HashMap<(String, String), Vec<Kline>>) -> bool + Send + Sync>>,
 }

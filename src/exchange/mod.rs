@@ -1,5 +1,6 @@
 mod error;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use sqlx::{Pool, Sqlite};
 use tracing::error;
@@ -20,7 +21,7 @@ pub struct Exchange {
     pub rest_client: Box<dyn RestClient>,
     pub parser: KlineParser,
     pub aggregator: Option<Arc<CandleAggregator>>,
-    db_pool: Pool<Sqlite>,
+    pub db_pool: Option<Arc<Pool<Sqlite>>>,
 }
 
 impl Exchange {
@@ -30,7 +31,7 @@ impl Exchange {
         rest_client: Box<dyn RestClient>,
         parser: KlineParser,
         aggregator: Option<Arc<CandleAggregator>>,
-        db_pool: Pool<Sqlite>,
+        db_pool: Option<Arc<Pool<Sqlite>>>,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -57,12 +58,10 @@ impl Exchange {
             .collect();
 
         // 2. Call build_handlers() once before the loop to build a chain of handlers for filtering
-        {
-            if let Some(aggregator) = self.aggregator.as_ref() {
-                aggregator.build_handlers(&keys, &self.db_pool);
-            } else {
-                error!("CandleAggregator is not set in ExchangeBuilder");
-            }
+        if let Some(aggregator) = self.aggregator.as_ref() {
+            aggregator.build_handlers(&keys, &self.db_pool).await;
+        } else {
+            error!("CandleAggregator is not set in ExchangeBuilder");
         }
 
         // 3. In the loop we only receive and process data
@@ -75,7 +74,7 @@ impl Exchange {
                             if let Some(aggregator) = self.aggregator.as_ref() {
                                 // aggregator.build_handlers(&keys, &self.db_pool);
                                 /* Here you can theoretically send the result of several requests from different Url */
-                                aggregator.http_response_process(parsed_data);
+                                aggregator.http_response_process(parsed_data).await;
                             } else {
                                 error!("CandleAggregator is not set in ExchangeBuilder");
                             }
@@ -139,7 +138,7 @@ pub struct ExchangeBuilder {
     name: Option<String>,
     rest_url: Option<String>,
     rest_client: Option<Box<dyn RestClient>>,
-    db_pool: Option<Pool<Sqlite>>,
+    db_pool: Option<Arc<Pool<Sqlite>>>,
     parser: Option<KlineParser>,
     aggregator: Option<Arc<CandleAggregator>>,
 }
@@ -177,17 +176,17 @@ impl ExchangeBuilder {
     }
 
     // Set DB pool
-    pub fn set_target_db(&mut self, db_pool: Pool<Sqlite>) -> &Self {
-        self.db_pool = Some(db_pool);
+    pub fn set_target_db(mut self, db_pool: Pool<Sqlite>) -> Self {
+        self.db_pool = Some(Arc::new(db_pool));
         self
     }
 
-    pub fn set_parser(&mut self, parser: KlineParser) -> &Self {
+    pub fn set_parser(mut self, parser: KlineParser) -> Self {
         self.parser = Some(parser);
         self
     }
 
-    pub fn set_aggregator(&mut self, aggregator: Arc<CandleAggregator>) -> &Self {
+    pub fn set_aggregator(mut self, aggregator: Arc<CandleAggregator>) -> Self {
         self.aggregator = Some(aggregator);
         self
     }
@@ -208,7 +207,7 @@ impl ExchangeBuilder {
             rest_client,
             parser,
             aggregator,
-            pool,
+            Some(pool),
         ))
     }
 }
