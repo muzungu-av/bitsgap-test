@@ -59,7 +59,13 @@ impl Exchange {
 
         // 2. Call build_handlers() once before the loop to build a chain of handlers for filtering
         if let Some(aggregator) = self.aggregator.as_ref() {
-            aggregator.build_handlers(&keys, &self.db_pool).await;
+            // Клонируем db_pool для передачи в build_handlers
+            if let Some(db_pool) = self.db_pool.clone() {
+                println!("aggregator.clone().build_handlers: ");
+                aggregator.clone().build_handlers(&keys, db_pool).await;
+            } else {
+                error!("db_pool is None");
+            }
         } else {
             error!("CandleAggregator is not set in ExchangeBuilder");
         }
@@ -74,6 +80,7 @@ impl Exchange {
                             if let Some(aggregator) = self.aggregator.as_ref() {
                                 // aggregator.build_handlers(&keys, &self.db_pool);
                                 /* Here you can theoretically send the result of several requests from different Url */
+                                println!("***** 1");
                                 aggregator.http_response_process(parsed_data).await;
                             } else {
                                 error!("CandleAggregator is not set in ExchangeBuilder");

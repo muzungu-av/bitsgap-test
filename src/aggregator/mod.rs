@@ -31,59 +31,53 @@ impl CandleAggregator {
     }
 
     pub async fn build_handlers(
-        &self,
+        self: Arc<Self>, // Передаём self как Arc<Self>
         keys: &[(String, String)],
-        db_pool: &Option<Arc<Pool<Sqlite>>>,
+        db_pool: Arc<Pool<Sqlite>>, // Передаём по значению, а не по ссылке!
     ) {
-        // Используем асинхронную блокировку для цепочки
-        let mut chain = self.chain.lock().await; // Получаем асинхронный доступ
-        let db_pool = db_pool;
+        println!("***** pub async fn build_handlers");
+        let db_pool = db_pool.clone(); // 🔥 Клонируем, чтобы не держать ссылку!
 
-        for (index, key) in keys.iter().enumerate() {
-            let key = key.clone();
-            let handler_name = format!("Handler_{}", index);
+        // Клонируем self до того, как будем передавать в асинхронную задачу
+        let self_clone = Arc::clone(&self);
 
-            if let Some(db_pool) = db_pool {
-                let db_pool = Arc::clone(&db_pool);
+        let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
+            println!("Data: {:?}", data);
 
-                // начало кода цепочки
-                let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
-                    let handler_name = handler_name.clone();
-                    let key = key.clone(); // по ключу будем фильтровать данные
-                    let db_pool = db_pool.clone();
-                    let mut data_copy = data.clone();
-                    tokio::spawn(async move {
-                        if let Some(klines) = data_copy.remove(&key) {
-                            if tracing::level_enabled!(Level::DEBUG) {
-                                debug!(
-                                    "Handler is started: {} for the key: ({}, {}), Data: {:?} ",
-                                    handler_name, key.0, key.1, klines
-                                );
-                            }
+            let mut keys_to_remove = Vec::new();
+            println!("***** for (key, klines) in data.iter()...");
+            for (key, klines) in data.iter() {
+                let key = key.clone();
+                let klines = klines.clone();
+                keys_to_remove.push(key.clone());
 
-                            if tracing::level_enabled!(Level::INFO) {
-                                info!(
-                                    "Handler is started: {} for the key: ({}, {}) and {} rows",
-                                    handler_name,
-                                    key.0,
-                                    key.1,
-                                    klines.len()
-                                );
-                            }
+                let db_pool = db_pool.clone();
+                let self_clone = Arc::clone(&self_clone); // Клонируем self для каждой задачи
+                println!("***** About to spawn task...");
+                tokio::spawn(async move {
+                    println!("***** 5");
+                    let mut chain = self_clone.chain.lock().await; // Используем клонированный self
+                    if let Some(last_kline) = klines.iter().max_by_key(|k| k.utc_begin) {
+                        chain
+                            .update_last_kline(key.clone(), last_kline.clone())
+                            .await;
+                    }
 
-                            if let Err(e) = save_klines(&db_pool, &klines).await {
-                                error!("Failed to save klines: {}", e);
-                            }
-                        }
-                    });
-                    true
+                    if let Err(e) = save_klines(&db_pool, &klines).await {
+                        error!("Failed to save klines: {}", e);
+                    }
                 });
-                //конец кода цепочки
-                //добавляем обработчик в цепочку
-                chain.add_handler(handler);
             }
-        }
-        println!("Chain of {} handlers", chain.handlers.len());
+
+            for key in keys_to_remove {
+                data.remove(&key);
+            }
+
+            true
+        });
+
+        // Клонируем self при вызове add_handler
+        self.chain.lock().await.add_handler(handler);
     }
 
     pub async fn http_response_process(
@@ -100,13 +94,25 @@ impl CandleAggregator {
 
 pub struct FilterChain {
     handlers: Vec<Arc<dyn Fn(&mut HashMap<(String, String), Vec<Kline>>) -> bool + Send + Sync>>,
+    last_klines: Mutex<HashMap<(String, String), Kline>>, // тут храним все последние Kline
 }
 
 impl FilterChain {
     pub fn new() -> Self {
         FilterChain {
             handlers: Vec::new(),
+            last_klines: Mutex::new(HashMap::new()),
         }
+    }
+
+    pub async fn update_last_kline(&self, key: (String, String), kline: Kline) {
+        let mut last_klines = self.last_klines.lock().await;
+        last_klines.insert(key, kline);
+    }
+
+    pub async fn get_last_kline(&self, key: &(String, String)) -> Option<Kline> {
+        let last_klines = self.last_klines.lock().await;
+        last_klines.get(key).cloned()
     }
 
     pub fn add_handler(
