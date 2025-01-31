@@ -1,8 +1,7 @@
 # bitsgap-test
+
 Test Task for Bitsgap
 
-## применените схемы в SQLite:
-sqlite3 db.sqlite < create_tables.sql
+## DataBase
 
-## DEPENDECIES
-cargo install sqlx-cli --no-default-features --features sqlite
+The database is Sqlite. It will be built by this code.
