@@ -52,7 +52,7 @@ impl KlineParser {
                                 .and_then(|s| s.parse::<f64>().ok())
                                 .unwrap_or_default(),
                             utc_begin: item[12].as_i64().unwrap_or(0),
-                            // volume_bs: vbs,
+                            volume_bs: vbs,
                         })
                     })
                     .fold(

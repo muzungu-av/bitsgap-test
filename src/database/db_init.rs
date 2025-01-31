@@ -25,12 +25,11 @@ pub async fn initialize_database(pool: &SqlitePool) {
             h REAL NOT NULL,
             l REAL NOT NULL,
             c REAL NOT NULL,
-            utc_begin INTEGER NOT NULL
-           -- ,
-           -- buy_base REAL NOT NULL,
-           -- sell_base REAL NOT NULL,
-           -- buy_quote REAL NOT NULL,
-           -- sell_quote REAL NOT NULL
+            utc_begin INTEGER NOT NULL,
+            buy_base REAL NOT NULL,
+            sell_base REAL NOT NULL,
+            buy_quote REAL NOT NULL,
+            sell_quote REAL NOT NULL
         );
 
         -- For quick retrieval of data in the right time order

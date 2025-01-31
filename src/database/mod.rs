@@ -43,10 +43,12 @@ pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(),
     for kline in klines {
         sqlx::query(
             r#"
-            INSERT INTO klines (pair, time_frame, o, h, l, c, utc_begin)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO klines (pair, time_frame, o, h, l, c, utc_begin, buy_base, sell_base,buy_quote, sell_quote)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
+
+        
         .bind(&kline.pair)
         .bind(&kline.time_frame)
         .bind(kline.o)
@@ -54,6 +56,10 @@ pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(),
         .bind(kline.l)
         .bind(kline.c)
         .bind(kline.utc_begin)
+        .bind(kline.volume_bs.buy_base)
+        .bind(kline.volume_bs.sell_base)
+        .bind(kline.volume_bs.buy_quote)
+        .bind(kline.volume_bs.sell_quote)
         .execute(db_pool) // или `&mut *tx` для транзакции
         .await?;
     }

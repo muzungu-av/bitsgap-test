@@ -11,7 +11,7 @@ pub struct Kline {
     pub l: f64,             // Минимальная цена
     pub c: f64,             // Цена закрытия
     pub utc_begin: i64,
-    // pub(crate) volume_bs: VBS,
+    pub(crate) volume_bs: VBS,
 }
 
 impl fmt::Display for Kline {
