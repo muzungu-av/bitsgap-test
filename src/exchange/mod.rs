@@ -59,7 +59,7 @@ impl Exchange {
 
         // 2. Call build_handlers() once before the loop to build a chain of handlers for filtering
         if let Some(aggregator) = self.aggregator.as_ref() {
-            // Клонируем db_pool для передачи в build_handlers
+            // Clone db_pool to pass to build_handlers
             if let Some(db_pool) = self.db_pool.clone() {
                 aggregator.clone().build_handlers(&keys, db_pool).await;
             } else {

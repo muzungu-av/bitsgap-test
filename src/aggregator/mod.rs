@@ -31,12 +31,12 @@ impl CandleAggregator {
     }
 
     pub async fn build_handlers(
-        self: Arc<Self>, // Передаём self как Arc<Self>
+        self: Arc<Self>, // Pass self as Arc<Self>
         keys: &[(String, String)],
         db_pool: Arc<Pool<Sqlite>>,
     ) {
-        let db_pool = db_pool.clone(); // Клонируем, чтобы не держать ссылку
-        let self_clone = Arc::clone(&self); // Клонируем self до того, как будем передавать в асинхронную задачу
+        let db_pool = db_pool.clone(); // Cloning so we don't have to keep the link
+        let self_clone = Arc::clone(&self); // Clone self before we pass it to the asynchronous task
         let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
             let mut keys_to_remove = Vec::new();
             for (key, klines) in data.iter() {
@@ -45,10 +45,11 @@ impl CandleAggregator {
                 keys_to_remove.push(key.clone());
 
                 let db_pool = db_pool.clone();
-                let self_clone = Arc::clone(&self_clone); // Клонируем self для каждой задачи
-                                                          //Использование tokio::task::spawn_blocking для предотвращения блокировки async runtime при сохранении klines
+                let self_clone = Arc::clone(&self_clone); // Clone self for each task
+
+                //Using tokio::task::spawn_blocking to prevent async runtime blocking when saving klines
                 tokio::task::spawn_blocking(move || {
-                    let rt = tokio::runtime::Runtime::new().unwrap(); // Создаём временный runtime
+                    let rt = tokio::runtime::Runtime::new().unwrap(); // Create a temporary runtime
                     rt.block_on(async {
                         let chain = self_clone.chain.lock().await;
                         if let Some(last_kline) = klines.iter().max_by_key(|k| k.utc_begin) {
@@ -71,7 +72,7 @@ impl CandleAggregator {
             true
         });
 
-        // Клонируем self при вызове add_handler
+        // Clone self when calling add_handler
         self.chain.lock().await.add_handler(handler);
     }
 
@@ -79,9 +80,9 @@ impl CandleAggregator {
         &self,
         mut grouped_kline: HashMap<(String, String), Vec<Kline>>,
     ) {
-        // Используем block_in_place для выполнения синхронной блокировки в асинхронном контексте
+        // We use block_in_place to perform synchronous blocking in an asynchronous context
         tokio::task::block_in_place(|| {
-            let chain = self.chain.blocking_lock(); // Синхронный доступ
+            let chain = self.chain.blocking_lock(); // Synchronous access
             chain.execute(&mut grouped_kline);
         });
     }
@@ -89,7 +90,7 @@ impl CandleAggregator {
 
 pub struct FilterChain {
     handlers: Vec<Arc<dyn Fn(&mut HashMap<(String, String), Vec<Kline>>) -> bool + Send + Sync>>,
-    last_klines: Mutex<HashMap<(String, String), Kline>>, // тут храним все последние Kline
+    last_klines: Mutex<HashMap<(String, String), Kline>>, // this is where we keep all the latest Kline
 }
 
 impl FilterChain {

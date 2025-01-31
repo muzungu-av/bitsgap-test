@@ -1,6 +1,4 @@
-pub mod connection;
 mod db_init;
-pub mod models;
 
 use db_init::initialize_database;
 use sqlx::sqlite::SqlitePool;
@@ -32,7 +30,7 @@ pub async fn establish_connection(filename: &str) -> Pool<Sqlite> {
 
 /// Creates a test database in memory
 #[allow(dead_code)]
-pub async fn get_test_database_sqlitePool() -> SqlitePool {
+pub async fn get_test_database_sqlite_pool() -> SqlitePool {
     SqlitePool::connect("sqlite::memory:")
         .await
         .expect("Error connecting to the test database")
@@ -48,7 +46,6 @@ pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(),
             "#,
         )
 
-        
         .bind(&kline.pair)
         .bind(&kline.time_frame)
         .bind(kline.o)
@@ -60,7 +57,7 @@ pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(),
         .bind(kline.volume_bs.sell_base)
         .bind(kline.volume_bs.buy_quote)
         .bind(kline.volume_bs.sell_quote)
-        .execute(db_pool) // или `&mut *tx` для транзакции
+        .execute(db_pool) // or `&mut *tx` for a transaction
         .await?;
     }
     // tx.commit().await?;
@@ -78,7 +75,7 @@ mod tests {
     #[tokio::test] // Asynchronous test
     async fn test_database_with_recent_trades_and_klines() {
         // 1. Create a connection pool to the test base
-        let pool = get_test_database_sqlitePool().await;
+        let pool = get_test_database_sqlite_pool().await;
 
         // Database initialization
         initialize_database(&pool).await;

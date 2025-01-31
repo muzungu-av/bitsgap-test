@@ -10,7 +10,7 @@ pub trait RestClient: Send + Sync {
 }
 
 pub struct ReqwestClient {
-    client: Client, // Используем неблокирующий клиент
+    client: Client, // Using a non-blocking client
 }
 
 impl ReqwestClient {

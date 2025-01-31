@@ -105,20 +105,20 @@ async fn setup_exchange(settings: &Settings) -> Result<Exchange, String> {
         ExchangeFactory::create(settings).map_err(|err| format!("Factory error: {}", err))?;
     debug!("The ExchangeFactory is complete ");
 
-    // Устанавливаем соединение с БД
+    // Establishing a connection to the database
     let db_pool = establish_connection(&settings.db_url).await;
     builder = builder.set_target_db(db_pool);
     debug!("Builder setting db pool is complete");
 
-    // Создаём парсер
+    // Create a parser
     let parser = KlineParser::new();
     builder = builder.set_parser(parser);
 
-    // Создаём агрегатор
+    // Create an aggregator
     let aggregator = CandleAggregator::get_instance().clone();
     builder = builder.set_aggregator(aggregator);
 
-    // Собираем объект Exchange
+    // Assembling the Exchange object
     match builder.build() {
         Ok(exchange) => {
             debug!("The Exchange is complete ");
