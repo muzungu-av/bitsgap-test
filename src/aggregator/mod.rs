@@ -33,19 +33,12 @@ impl CandleAggregator {
     pub async fn build_handlers(
         self: Arc<Self>, // Передаём self как Arc<Self>
         keys: &[(String, String)],
-        db_pool: Arc<Pool<Sqlite>>, // Передаём по значению, а не по ссылке!
+        db_pool: Arc<Pool<Sqlite>>,
     ) {
-        println!("***** pub async fn build_handlers");
-        let db_pool = db_pool.clone(); // 🔥 Клонируем, чтобы не держать ссылку!
-
-        // Клонируем self до того, как будем передавать в асинхронную задачу
-        let self_clone = Arc::clone(&self);
-
+        let db_pool = db_pool.clone(); // Клонируем, чтобы не держать ссылку
+        let self_clone = Arc::clone(&self); // Клонируем self до того, как будем передавать в асинхронную задачу
         let handler = Arc::new(move |data: &mut HashMap<(String, String), Vec<Kline>>| {
-            println!("Data: {:?}", data);
-
             let mut keys_to_remove = Vec::new();
-            println!("***** for (key, klines) in data.iter()...");
             for (key, klines) in data.iter() {
                 let key = key.clone();
                 let klines = klines.clone();
@@ -53,19 +46,21 @@ impl CandleAggregator {
 
                 let db_pool = db_pool.clone();
                 let self_clone = Arc::clone(&self_clone); // Клонируем self для каждой задачи
-                println!("***** About to spawn task...");
-                tokio::spawn(async move {
-                    println!("***** 5");
-                    let mut chain = self_clone.chain.lock().await; // Используем клонированный self
-                    if let Some(last_kline) = klines.iter().max_by_key(|k| k.utc_begin) {
-                        chain
-                            .update_last_kline(key.clone(), last_kline.clone())
-                            .await;
-                    }
-
-                    if let Err(e) = save_klines(&db_pool, &klines).await {
-                        error!("Failed to save klines: {}", e);
-                    }
+                                                          //Использование tokio::task::spawn_blocking для предотвращения блокировки async runtime при сохранении klines
+                tokio::task::spawn_blocking(move || {
+                    let rt = tokio::runtime::Runtime::new().unwrap(); // Создаём временный runtime
+                    rt.block_on(async {
+                        let chain = self_clone.chain.lock().await;
+                        if let Some(last_kline) = klines.iter().max_by_key(|k| k.utc_begin) {
+                            chain
+                                .update_last_kline(key.clone(), last_kline.clone())
+                                .await;
+                        }
+                        match save_klines(&db_pool, &klines).await {
+                            Ok(_) => debug!("Save klines completed"),
+                            Err(e) => error!("Failed to save klines: {}", e),
+                        }
+                    });
                 });
             }
 

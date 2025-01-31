@@ -39,8 +39,7 @@ pub async fn get_test_database_sqlitePool() -> SqlitePool {
 }
 
 pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(), sqlx::Error> {
-    let mut tx = db_pool.begin().await?;
-
+    // let mut tx = db_pool.begin().await?;
     for kline in klines {
         sqlx::query(
             r#"
@@ -55,11 +54,10 @@ pub async fn save_klines(db_pool: &Pool<Sqlite>, klines: &[Kline]) -> Result<(),
         .bind(kline.l)
         .bind(kline.c)
         .bind(kline.utc_begin)
-        .execute(&mut *tx) // используем `&mut *tx` для транзакции
+        .execute(db_pool) // или `&mut *tx` для транзакции
         .await?;
     }
-
-    tx.commit().await?;
+    // tx.commit().await?;
     Ok(())
 }
 
